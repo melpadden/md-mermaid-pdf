@@ -4,11 +4,21 @@
   "description": "Render GitHub-flavoured Markdown with Mermaid diagrams to PDF.",
   "type": "module",
   "bin": {
-    "md-mermaid-pdf": "./bin/md-mermaid-pdf.js"
+    "md-mermaid-pdf": "./src/cli.js"
   },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "render:sample": "node ./bin/md-mermaid-pdf.js ./samples/example.md ./samples/example.pdf",
-    "test": "node ./test/smoke.test.js"
+    "render:sample": "node ./src/cli.js ./samples/example.md ./samples/example.pdf",
+    "test": "node --test test/smoke.test.js",
+    "lint": "eslint src/ test/",
+    "typecheck": "tsc"
   },
   "keywords": [
     "markdown",
@@ -16,7 +26,16 @@
     "pdf",
     "github"
   ],
+  "author": "Mel Padden <melpadden@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/melpadden/md-mermaid-pdf.git"
+  },
+  "homepage": "https://github.com/melpadden/md-mermaid-pdf#readme",
+  "bugs": {
+    "url": "https://github.com/melpadden/md-mermaid-pdf/issues"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -31,5 +50,10 @@
     "pdf-lib": "^1.17.1",
     "playwright": "^1.56.1"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^25.9.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.0.0"
+  }
 }

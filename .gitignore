@@ -1,3 +1,6 @@
 node_modules/
 *.log
 samples/*.test.pdf
+data/
+plans/
+.claude/

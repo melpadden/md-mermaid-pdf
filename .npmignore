@@ -1,0 +1,8 @@
+samples/
+test/
+plans/
+data/
+.github/
+tsconfig.json
+eslint.config.js
+*.test.pdf

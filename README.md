@@ -12,13 +12,15 @@ The CLI uses `markdown-it` for GitHub-flavoured Markdown, `github-markdown-css` 
 ## Install
 
 ```bash
-npm install
+npm install md-mermaid-pdf
 npx playwright install chromium
 ```
 
 For local development:
 
 ```bash
+npm install
+npx playwright install chromium
 npm link
 ```
 
@@ -31,7 +33,18 @@ md-mermaid-pdf docs/architecture.md docs/architecture.pdf
 You can also run without linking:
 
 ```bash
-node ./bin/md-mermaid-pdf.js docs/architecture.md docs/architecture.pdf
+node ./src/cli.js docs/architecture.md docs/architecture.pdf
+```
+
+## Programmatic API
+
+```js
+import { renderMarkdownToPdf } from "md-mermaid-pdf";
+
+await renderMarkdownToPdf("docs/architecture.md", "docs/architecture.pdf", {
+  toc: true,
+  theme: "forest",
+});
 ```
 
 ## Usage
@@ -53,6 +66,9 @@ If `output.pdf` is omitted, the CLI writes a PDF next to the input file.
 --toc                  Add a generated table of contents
 --no-background        Do not print CSS backgrounds
 --debug-html <path>    Write the intermediate HTML to inspect rendering
+--verbose              Print timing for each render phase
+--quiet                Suppress all output
+-v, --version          Print version number
 ```
 
 ## Mermaid diagrams
@@ -75,7 +91,7 @@ If Mermaid fails to parse a diagram, the command exits non-zero and reports the 
 npm test
 ```
 
-The smoke test renders `samples/example.md` to `samples/example.test.pdf` and checks that a non-empty PDF was created.
+The smoke test renders `samples/example.md` and verifies the output is a valid PDF with correct metadata. It also tests additional CLI flags and verifies that malformed Mermaid diagrams produce a non-zero exit.
 
 ## Notes
 

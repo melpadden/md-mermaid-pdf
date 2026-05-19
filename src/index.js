@@ -1,11 +1,9 @@
-#!/usr/bin/env node
-
-import { Command } from "commander";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import markdownIt from "markdown-it";
 import markdownItAnchor from "markdown-it-anchor";
 import markdownItTaskLists from "markdown-it-task-lists";
@@ -13,29 +11,23 @@ import hljs from "highlight.js";
 import { PDFDocument } from "pdf-lib";
 import { chromium } from "playwright";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, "..");
+const require = createRequire(import.meta.url);
 
-const program = new Command();
+/**
+ * @typedef {Object} RenderOptions
+ * @property {string} [title] - Document title; defaults to the input file's basename
+ * @property {string} [author] - PDF author metadata
+ * @property {string} [theme] - Mermaid theme (default, forest, dark, neutral)
+ * @property {string} [pageSize] - PDF page size (A4, Letter, etc.)
+ * @property {string} [margin] - CSS page margin (e.g. 18mm, 0.5in)
+ * @property {boolean} [toc] - Inject a table of contents
+ * @property {boolean} [background] - Print CSS backgrounds
+ * @property {string} [debugHtml] - Write intermediate HTML to this path
+ * @property {boolean} [verbose] - Print timing for each phase
+ * @property {boolean} [quiet] - Suppress all output
+ */
 
-program
-  .name("md-mermaid-pdf")
-  .description("Render GitHub-flavoured Markdown with Mermaid diagrams to PDF.")
-  .argument("<input>", "Markdown file to render")
-  .argument("[output]", "PDF output path. Defaults to the input filename with .pdf")
-  .option("--title <title>", "Document title. Defaults to the Markdown file basename")
-  .option("--author <author>", "PDF author metadata", "md-mermaid-pdf")
-  .option("--theme <theme>", "Mermaid theme", "default")
-  .option("--page-size <size>", "PDF page size", "A4")
-  .option("--margin <margin>", "PDF margin, e.g. 15mm, 0.5in", "18mm")
-  .option("--toc", "Inject a table of contents generated from Markdown headings", false)
-  .option("--no-background", "Do not print CSS backgrounds")
-  .option("--debug-html <path>", "Write the intermediate HTML to this path")
-  .parse();
-
-const options = program.opts();
-const [inputArg, outputArg] = program.args;
-
+/** @param {string} value @returns {string} */
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -45,6 +37,7 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+/** @param {string} value @returns {string} */
 function slugifyHeading(value) {
   return String(value)
     .trim()
@@ -55,6 +48,10 @@ function slugifyHeading(value) {
     .replace(/^-|-$/g, "");
 }
 
+/**
+ * @param {string} markdown
+ * @returns {{ level: number, text: string, id: string }[]}
+ */
 function collectHeadings(markdown) {
   const headings = [];
   const used = new Map();
@@ -63,9 +60,7 @@ function collectHeadings(markdown) {
 
   while ((match = headingPattern.exec(markdown)) !== null) {
     const level = match[1].length;
-    if (level < 2 || level > 4) {
-      continue;
-    }
+    if (level < 2 || level > 4) continue;
 
     const text = match[2]
       .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
@@ -75,25 +70,23 @@ function collectHeadings(markdown) {
     const count = used.get(baseSlug) ?? 0;
     used.set(baseSlug, count + 1);
 
-    headings.push({
-      level,
-      text,
-      id: count === 0 ? baseSlug : `${baseSlug}-${count}`
-    });
+    headings.push({ level, text, id: count === 0 ? baseSlug : `${baseSlug}-${count}` });
   }
 
   return headings;
 }
 
+/**
+ * @param {{ level: number, text: string, id: string }[]} headings
+ * @returns {string}
+ */
 function buildToc(headings) {
-  if (!headings.length) {
-    return "";
-  }
+  if (!headings.length) return "";
 
   const items = headings
-    .map((heading) => {
-      const indent = Math.max(0, heading.level - 2);
-      return `<li class="toc-level-${heading.level}" style="margin-left:${indent * 1.1}rem"><a href="#${escapeHtml(heading.id)}">${escapeHtml(heading.text)}</a></li>`;
+    .map((h) => {
+      const indent = Math.max(0, h.level - 2);
+      return `<li class="toc-level-${h.level}" style="margin-left:${indent * 1.1}rem"><a href="#${escapeHtml(h.id)}">${escapeHtml(h.text)}</a></li>`;
     })
     .join("\n");
 
@@ -136,22 +129,33 @@ function createMarkdownRenderer() {
       return `<figure class="mermaid-figure"><div class="mermaid" data-diagram="${diagramNumber}">${escapeHtml(token.content)}</div></figure>`;
     }
 
-    return originalFence(tokens, idx, rendererOptions, env, self);
+    return originalFence
+      ? originalFence(tokens, idx, rendererOptions, env, self)
+      : self.renderToken(tokens, idx, rendererOptions);
   };
 
   return md;
 }
 
-async function readPackageAsset(packageName, relativePath) {
-  const packageJsonPath = path.join(projectRoot, "node_modules", packageName, "package.json");
-  if (!existsSync(packageJsonPath)) {
-    throw new Error(`Missing dependency asset for ${packageName}. Run npm install first.`);
-  }
-
-  const packageRoot = path.dirname(packageJsonPath);
-  return fs.readFile(path.join(packageRoot, relativePath), "utf8");
+/**
+ * Resolves a file path within an installed npm package using Node module resolution,
+ * so it works correctly whether the package is installed globally, locally, or run from source.
+ * @param {string} packageName
+ * @param {string} relativePath
+ * @returns {string}
+ */
+function resolvePackageAsset(packageName, relativePath) {
+  const pkgJsonPath = require.resolve(`${packageName}/package.json`);
+  return path.join(path.dirname(pkgJsonPath), relativePath);
 }
 
+/**
+ * @param {string} markdown
+ * @param {string} title
+ * @param {Required<RenderOptions>} opts
+ * @param {string} inputPath
+ * @returns {Promise<string>}
+ */
 async function buildHtml(markdown, title, opts, inputPath) {
   const md = createMarkdownRenderer();
   const env = {};
@@ -159,9 +163,9 @@ async function buildHtml(markdown, title, opts, inputPath) {
   const toc = opts.toc ? buildToc(collectHeadings(markdown)) : "";
   const baseHref = pathToFileURL(path.dirname(inputPath) + path.sep).href;
   const [githubCss, highlightCss, mermaidBundle] = await Promise.all([
-    readPackageAsset("github-markdown-css", "github-markdown.css"),
-    readPackageAsset("highlight.js", "styles/github.css"),
-    readPackageAsset("mermaid", "dist/mermaid.min.js")
+    fs.readFile(resolvePackageAsset("github-markdown-css", "github-markdown.css"), "utf8"),
+    fs.readFile(resolvePackageAsset("highlight.js", "styles/github.css"), "utf8"),
+    fs.readFile(resolvePackageAsset("mermaid", "dist/mermaid.min.js"), "utf8")
   ]);
 
   return `<!doctype html>
@@ -334,71 +338,115 @@ async function buildHtml(markdown, title, opts, inputPath) {
 </html>`;
 }
 
-async function main() {
-  const inputPath = path.resolve(inputArg);
-  const outputPath = path.resolve(outputArg ?? inputPath.replace(/\.[^.]+$/, "") + ".pdf");
+/**
+ * Render a Markdown file (with optional Mermaid diagrams) to PDF.
+ *
+ * @param {string} inputPath - Absolute or relative path to the Markdown file
+ * @param {string} [outputPath] - Output PDF path; defaults to inputPath with .pdf extension
+ * @param {RenderOptions} [options]
+ * @returns {Promise<{ inputPath: string, outputPath: string }>}
+ */
+export async function renderMarkdownToPdf(inputPath, outputPath, options = {}) {
+  const resolvedInput = path.resolve(inputPath);
+  const resolvedOutput = path.resolve(
+    outputPath ?? resolvedInput.replace(/\.[^.]+$/, "") + ".pdf"
+  );
 
-  if (!existsSync(inputPath)) {
-    throw new Error(`Input file does not exist: ${inputPath}`);
+  const opts = /** @type {Required<RenderOptions>} */ ({
+    title: options.title ?? path.basename(resolvedInput, path.extname(resolvedInput)),
+    author: options.author ?? "md-mermaid-pdf",
+    theme: options.theme ?? "default",
+    pageSize: options.pageSize ?? "A4",
+    margin: options.margin ?? "18mm",
+    toc: options.toc ?? false,
+    background: options.background ?? true,
+    debugHtml: options.debugHtml ?? "",
+    verbose: options.verbose ?? false,
+    quiet: options.quiet ?? false,
+  });
+
+  const log = opts.verbose && !opts.quiet ? (/** @type {string} */ msg) => console.log(msg) : () => {};
+
+  if (!existsSync(resolvedInput)) {
+    throw new Error(`Input file does not exist: ${resolvedInput}`);
   }
 
-  const markdown = await fs.readFile(inputPath, "utf8");
-  const title = options.title ?? path.basename(inputPath, path.extname(inputPath));
-  const html = await buildHtml(markdown, title, options, inputPath);
-  const htmlPath = options.debugHtml
-    ? path.resolve(options.debugHtml)
+  let t = performance.now();
+
+  const markdown = await fs.readFile(resolvedInput, "utf8");
+  log(`  read markdown: ${(performance.now() - t).toFixed(0)}ms`); t = performance.now();
+
+  const html = await buildHtml(markdown, opts.title, opts, resolvedInput);
+  log(`  built HTML: ${(performance.now() - t).toFixed(0)}ms`); t = performance.now();
+
+  const htmlPath = opts.debugHtml
+    ? path.resolve(opts.debugHtml)
     : path.join(await fs.mkdtemp(path.join(os.tmpdir(), "md-mermaid-pdf-")), "document.html");
 
   await fs.mkdir(path.dirname(htmlPath), { recursive: true });
   await fs.writeFile(htmlPath, html, "utf8");
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.mkdir(path.dirname(resolvedOutput), { recursive: true });
 
-  const browser = await chromium.launch({ headless: true });
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (/** @type {any} */ error) {
+    if (String(error?.message).includes("Executable doesn't exist")) {
+      throw new Error(
+        "Chromium is not installed. Run: npx playwright install chromium"
+      );
+    }
+    throw error;
+  }
+  log(`  launched browser: ${(performance.now() - t).toFixed(0)}ms`); t = performance.now();
+
   const page = await browser.newPage();
+  /** @type {string[]} */
   const browserErrors = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error") {
-      browserErrors.push(message.text());
-    }
+    if (message.type() === "error") browserErrors.push(message.text());
   });
 
   try {
     await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "networkidle" });
+    // Callbacks run in Chromium context; window globals are set by the injected mermaid script
+    // @ts-ignore
+    // eslint-disable-next-line no-undef
     await page.waitForFunction(() => window.__mermaidDone === true, null, { timeout: 30000 }).catch((error) => {
       const details = browserErrors.length ? `\nBrowser errors:\n${browserErrors.join("\n")}` : "";
       throw new Error(`${error.message}${details}`);
     });
 
+    // @ts-ignore
+    // eslint-disable-next-line no-undef
     const mermaidErrors = await page.evaluate(() => window.__mermaidErrors ?? []);
     if (mermaidErrors.length > 0) {
-      throw new Error(`Mermaid rendering failed in ${inputPath}:\n${mermaidErrors.join("\n")}`);
+      throw new Error(`Mermaid rendering failed in ${resolvedInput}:\n${mermaidErrors.join("\n")}`);
     }
+    log(`  rendered diagrams: ${(performance.now() - t).toFixed(0)}ms`); t = performance.now();
 
     await page.pdf({
-      path: outputPath,
-      format: options.pageSize,
-      printBackground: options.background,
+      path: resolvedOutput,
+      format: opts.pageSize,
+      printBackground: opts.background,
       preferCSSPageSize: false
     });
+    log(`  printed PDF: ${(performance.now() - t).toFixed(0)}ms`); t = performance.now();
 
-    const pdfBytes = await fs.readFile(outputPath);
+    const pdfBytes = await fs.readFile(resolvedOutput);
     const pdfDoc = await PDFDocument.load(pdfBytes);
-    pdfDoc.setTitle(title);
-    pdfDoc.setAuthor(options.author);
+    pdfDoc.setTitle(opts.title);
+    pdfDoc.setAuthor(opts.author);
     pdfDoc.setCreator("md-mermaid-pdf");
     pdfDoc.setProducer("md-mermaid-pdf");
     pdfDoc.setCreationDate(new Date());
     pdfDoc.setModificationDate(new Date());
-    await fs.writeFile(outputPath, await pdfDoc.save());
+    await fs.writeFile(resolvedOutput, await pdfDoc.save());
+    log(`  wrote metadata: ${(performance.now() - t).toFixed(0)}ms`);
   } finally {
     await browser.close();
   }
 
-  console.log(`Rendered ${inputPath} -> ${outputPath}`);
+  return { inputPath: resolvedInput, outputPath: resolvedOutput };
 }
-
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
