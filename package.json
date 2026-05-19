@@ -1,6 +1,6 @@
 {
   "name": "@paddentech/md-mermaid-pdf",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Render GitHub-flavoured Markdown with Mermaid diagrams to PDF.",
   "type": "module",
   "bin": {
