@@ -1,0 +1,35 @@
+{
+  "name": "md-mermaid-pdf",
+  "version": "0.1.0",
+  "description": "Render GitHub-flavoured Markdown with Mermaid diagrams to PDF.",
+  "type": "module",
+  "bin": {
+    "md-mermaid-pdf": "./bin/md-mermaid-pdf.js"
+  },
+  "scripts": {
+    "render:sample": "node ./bin/md-mermaid-pdf.js ./samples/example.md ./samples/example.pdf",
+    "test": "node ./test/smoke.test.js"
+  },
+  "keywords": [
+    "markdown",
+    "mermaid",
+    "pdf",
+    "github"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "github-markdown-css": "^5.8.1",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.2.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "mermaid": "^11.12.0",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.56.1"
+  },
+  "devDependencies": {}
+}
