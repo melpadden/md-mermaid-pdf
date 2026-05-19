@@ -4,7 +4,7 @@
   "description": "Render GitHub-flavoured Markdown with Mermaid diagrams to PDF.",
   "type": "module",
   "bin": {
-    "md-mermaid-pdf": "./src/cli.js"
+    "md-mermaid-pdf": "src/cli.js"
   },
   "exports": {
     ".": "./src/index.js"
